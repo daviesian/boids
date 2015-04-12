@@ -8,14 +8,6 @@
   (:require [quil.core :as q :include-macros true]
             [quil.middleware :as m :include-macros true]))
 
-(defn foo [greeting]
-  (if greeting
-    (str greeting "ClojureScript!")
-    (str "Hello, ClojureScript!")))
-
-
-(.write js/document (foo "Welcome to "))
-
 (defprotocol PVec
   (add [a b])
   (subtract [a b])
@@ -54,21 +46,22 @@
     {:boids     boids
      :obstacles [
                  {:position (multiply (Vector. (q/width) (q/height)) 0.5)
-                  :radius 50}]})
+                  :radius 50}]
+     :flock? true})
 
   )
 
-(defn update-boid [b bs os]
+(defn update-boid [b flock? bs os]
   ;(.profile js/console "update")
   (let [requested []
         nearby-boids (filter (partial not= b) (filter #(< (dist (:position b) (:position %)) 100) bs))
 
         ;; Avoid walls
 
-        requested (conj requested (multiply (Vector. -1 0) (/ 100 (q/sq (- (q/width) (:x (:position b)))))))
-        requested (conj requested (multiply (Vector. 1 0) (/ 100 (q/sq (:x (:position b))))))
-        requested (conj requested (multiply (Vector. 0 1) (/ 100 (q/sq (:y (:position b))))))
-        requested (conj requested (multiply (Vector. 0 -1) (/ 100 (q/sq (- (q/height) (:y (:position b)))))))
+        requested (conj requested (multiply (Vector. -1 0) (/ 500 (q/sq (- (q/width) (:x (:position b)))))))
+        requested (conj requested (multiply (Vector. 1 0) (/ 500 (q/sq (:x (:position b))))))
+        requested (conj requested (multiply (Vector. 0 1) (/ 500 (q/sq (:y (:position b))))))
+        requested (conj requested (multiply (Vector. 0 -1) (/ 500 (q/sq (- (q/height) (:y (:position b)))))))
 
         ;; Avoid obstacles
 
@@ -86,14 +79,14 @@
 
         ;; Match velocity with nearby boids
 
-        requested (if (> (count nearby-boids) 0)
+        requested (if (and flock? (> (count nearby-boids) 0))
                     (conj requested (multiply (subtract (multiply (reduce add (map :velocity nearby-boids)) (/ 1 (count nearby-boids))) (:velocity b))
                                               0.1))
                     requested)
         ;; Attract to Center of Mass of nearby boids
 
 
-        requested (if (> (count nearby-boids) 0)
+        requested (if (and flock? (> (count nearby-boids) 0))
                     (let [com (multiply (reduce add (map :position nearby-boids)) (/ 1 (count nearby-boids)))]
                       (conj requested (normalise (subtract com (:position b)))))
                     requested)
@@ -121,7 +114,7 @@
 
 (defn update-boids [state]
   (assoc state :boids (map (fn [b]
-                             (update-boid b (:boids state) (:obstacles state))) (:boids state) )))
+                             (update-boid b (:flock? state) (:boids state) (:obstacles state))) (:boids state) )))
 
 (defn draw [state]
   (q/background 200)
@@ -150,6 +143,9 @@
   (assoc state :obstacles [{:position (Vector. (:x e) (:y e))
                             :radius 50}]))
 
+(defn mouse-clicked [state e]
+  (assoc state :flock? (not (:flock? state))))
+
 (defn boids-sketch []
   (q/sketch
     :host "boids-sketch"
@@ -157,7 +153,8 @@
     :update #'update-boids
     :middleware [m/fun-mode]
     :draw #'draw
-    :size [1000 800]
-    :mouse-moved mouse-moved))
+    :size [(- (aget js/window "innerWidth") 40) (- (aget js/window "innerHeight") 100)]
+    :mouse-moved mouse-moved
+    :mouse-clicked mouse-clicked))
 
 (boids-sketch)
